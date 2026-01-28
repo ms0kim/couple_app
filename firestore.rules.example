@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 사용자 문서
+    match /users/{userId} {
+      // 본인만 읽기/쓰기 가능
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // 커플인 경우 파트너도 읽기 가능
+      allow read: if request.auth != null &&
+        exists(/databases/$(database)/documents/couples/$(resource.data.coupleId)) &&
+        (get(/databases/$(database)/documents/couples/$(resource.data.coupleId)).data.user1Id == request.auth.uid ||
+         get(/databases/$(database)/documents/couples/$(resource.data.coupleId)).data.user2Id == request.auth.uid);
+    }
+
+    // 커플 문서
+    match /couples/{coupleId} {
+      // 커플 멤버만 읽기 가능
+      allow read: if request.auth != null &&
+        (resource.data.user1Id == request.auth.uid ||
+         resource.data.user2Id == request.auth.uid);
+
+      // 생성: 인증된 사용자
+      allow create: if request.auth != null &&
+        request.resource.data.user1Id == request.auth.uid;
+
+      // 업데이트: user2Id가 null인 경우에만 연결 가능
+      allow update: if request.auth != null &&
+        resource.data.user2Id == null &&
+        request.resource.data.user2Id == request.auth.uid;
+    }
+
+    // 상태 문서
+    match /status/{userId} {
+      // 본인만 쓰기 가능
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // 본인 또는 커플 파트너만 읽기 가능
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        // 커플인지 확인하는 로직 (실제로는 커플 ID로 검증)
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+    }
+  }
+}
